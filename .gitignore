@@ -1,0 +1,10 @@
+node_modules/
+.dev-cert.pem
+.dev-key.pem
+.DS_Store
+*.log
+android/.gradle/
+android/build/
+android/app/build/
+ios/App/Pods/
+ios/App/DerivedData/

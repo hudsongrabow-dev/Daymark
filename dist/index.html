@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#eaf5f8" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <title>Daymark Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="auth-view" id="authView" aria-label="Sign in">
+      <div class="auth-art" aria-hidden="true">
+        <span class="art-sun"></span>
+        <span class="art-line art-line-one"></span>
+        <span class="art-line art-line-two"></span>
+        <span class="art-note note-one">09:00</span>
+        <span class="art-note note-two">focus</span>
+      </div>
+      <div class="auth-content">
+        <p class="eyebrow">DAYMARK / PERSONAL PLANNER</p>
+        <h1>A calmer place<br /><em>to get things done.</em></h1>
+        <p class="auth-copy">Keep deadlines visible, make space for what matters, and let your future self get a gentle nudge.</p>
+        <form id="authForm" class="auth-form">
+          <label>Email <input id="emailInput" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
+          <label>Password <input id="passwordInput" type="password" autocomplete="current-password" placeholder="At least 6 characters" minlength="6" required /></label>
+          <p class="form-error" id="authError" role="alert"></p>
+          <button class="primary-button" type="submit"><span id="authSubmitLabel">Enter your planner</span><span aria-hidden="true">→</span></button>
+        </form>
+        <p class="auth-hint">New here? Your account is created automatically.</p>
+      </div>
+    </section>
+
+    <section class="planner-view hidden" id="plannerView" aria-label="Planner">
+      <header class="topbar">
+        <div class="brand-mark"><span class="brand-dot"></span>daymark</div>
+        <div class="topbar-actions">
+          <button class="icon-button notification-button" id="notificationButton" aria-label="Enable browser reminders" title="Enable browser reminders">♧<span class="notification-dot hidden" id="notificationDot"></span></button>
+          <button class="avatar" id="profileButton" aria-label="Sign out">JD</button>
+        </div>
+      </header>
+
+      <div class="welcome-row">
+        <div>
+          <p class="eyebrow">MONDAY, SEPTEMBER 14</p>
+          <h2>Good morning, <span id="firstName">Jordan</span>.</h2>
+        </div>
+        <button class="add-button" id="openAddButton"><span>+</span> Add assignment</button>
+      </div>
+      <section class="voice-box" id="voiceBox">
+        <button class="voice-button" id="voiceButton" type="button" aria-label="Speak an assignment">
+          <span class="mic-icon" aria-hidden="true">●</span>
+          <span><strong>Speak an assignment</strong><small id="voiceStatus">Tap to allow microphone access</small></span>
+          <span class="voice-arrow" aria-hidden="true">↗</span>
+        </button>
+        <p class="voice-transcript hidden" id="voiceTranscript"></p>
+      </section>
+
+      <div class="content-grid">
+        <section class="calendar-card panel">
+          <div class="section-heading">
+            <div>
+              <p class="section-kicker">YOUR MONTH</p>
+              <h3 id="monthTitle">September 2026</h3>
+            </div>
+            <div class="calendar-nav">
+              <button class="icon-button" id="prevMonth" aria-label="Previous month">←</button>
+              <button class="icon-button" id="nextMonth" aria-label="Next month">→</button>
+            </div>
+          </div>
+          <div class="weekdays" aria-hidden="true"><span>MON</span><span>TUE</span><span>WED</span><span>THU</span><span>FRI</span><span>SAT</span><span>SUN</span></div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+          <div class="calendar-legend"><span><i class="legend-dot coral"></i> assignment</span><span><i class="legend-dot teal"></i> today</span></div>
+        </section>
+
+        <aside class="agenda-column">
+          <section class="focus-card panel">
+            <div class="focus-topline"><span class="live-dot"></span> NEXT UP <span class="focus-time" id="nextUpTime">—</span></div>
+            <h3 id="nextUpTitle">Your day is clear.</h3>
+            <p id="nextUpMeta">Add an assignment to see it here.</p>
+            <div class="progress-track"><span id="progressBar"></span></div>
+            <div class="progress-caption"><span id="progressLabel">0 assignments due</span><span>this week</span></div>
+          </section>
+          <section class="agenda-section">
+            <div class="section-heading compact"><div><p class="section-kicker">UPCOMING</p><h3>Your agenda</h3></div><span class="date-badge" id="agendaDate">SEP 14</span></div>
+            <div class="assignment-list" id="assignmentList"></div>
+          </section>
+        </aside>
+      </div>
+
+      <nav class="bottom-nav" aria-label="Primary navigation">
+        <button class="nav-item active"><span>▦</span>Overview</button>
+        <button class="nav-item" id="navAdd"><span>＋</span>Add</button>
+        <button class="nav-item" id="navReminders"><span>◷</span>Reminders</button>
+      </nav>
+    </section>
+  </main>
+
+  <dialog class="assignment-dialog" id="assignmentDialog">
+    <form method="dialog" id="assignmentForm" class="dialog-card">
+      <button class="close-button" id="closeAssignmentButton" type="button" aria-label="Close">×</button>
+      <p class="section-kicker">NEW ENTRY</p>
+      <h2>Make it visible.</h2>
+      <p class="dialog-copy">A clear next step is a kind thing to leave yourself.</p>
+      <label>Assignment title <input id="assignmentTitle" type="text" placeholder="e.g. Biology reading" required /></label>
+      <div class="form-row"><label>Due date <input id="assignmentDate" type="date" required /></label><label>Time <input id="assignmentTime" type="time" value="17:00" required /></label></div>
+      <label>Remind me <select id="assignmentReminder"><option value="0">At due time</option><option value="15">15 minutes before</option><option value="60" selected>1 hour before</option><option value="1440">1 day before</option><option value="daily">Every day at this time</option></select></label>
+      <label class="color-choice">Color <span><input type="radio" name="assignmentColor" value="coral" checked /><i class="swatch coral"></i><input type="radio" name="assignmentColor" value="teal" /><i class="swatch teal"></i><input type="radio" name="assignmentColor" value="yellow" /><i class="swatch yellow"></i></span></label>
+      <button class="primary-button" type="submit">Save assignment <span aria-hidden="true">→</span></button>
+    </form>
+  </dialog>
+  <div class="toast" id="toast" role="status"></div>
+  <script src="app.js"></script>
+  <script>if ('serviceWorker' in navigator) navigator.serviceWorker.register('service-worker.js');</script>
+</body>
+</html>

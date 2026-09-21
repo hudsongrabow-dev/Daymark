@@ -1,0 +1,6 @@
+{
+  "appId": "com.daymark.planner",
+  "appName": "Daymark",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
