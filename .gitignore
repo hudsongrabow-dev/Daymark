@@ -1,4 +1,8 @@
 node_modules/
+.next/
+.env
+.env.local
+server-data.json
 .dev-cert.pem
 .dev-key.pem
 .DS_Store

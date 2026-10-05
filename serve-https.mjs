@@ -1,31 +1,33 @@
-import { createServer } from 'node:https';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { extname, join, normalize } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
+import 'dotenv/config';
+import sgMail from '@sendgrid/mail';
 
-const require = createRequire(import.meta.url);
-const selfsigned = require('selfsigned');
-const root = fileURLToPath(new URL('.', import.meta.url));
-const keyPath = join(root, '.dev-key.pem');
-const certPath = join(root, '.dev-cert.pem');
-
-if (!existsSync(keyPath) || !existsSync(certPath)) {
-  const attrs = [{ name: 'commonName', value: 'Daymark local development' }];
-  const { private: privateKey, cert } = selfsigned.generate(attrs, {
-    days: 365,
-    keySize: 2048,
-    extensions: [{ name: 'subjectAltName', altNames: [{ type: 2, value: 'localhost' }, { type: 7, ip: '127.0.0.1' }, { type: 7, ip: '172.16.0.218' }] }]
-  });
-  writeFileSync(keyPath, privateKey);
-  writeFileSync(certPath, cert);
+const sendgridApiKey = process.env.SENDGRID_API_KEY || '';
+if (sendgridApiKey) {
+  sgMail.setApiKey(sendgridApiKey);
 }
 
-const contentTypes = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml' };
-createServer({ key: readFileSync(keyPath), cert: readFileSync(certPath) }, (request, response) => {
-  const requested = normalize(request.url === '/' ? '/index.html' : request.url).replace(/^\.\.(?:[\\/]|$)/, '');
-  const filePath = join(root, requested);
-  if (!existsSync(filePath)) { response.writeHead(404); response.end('Not found'); return; }
-  response.writeHead(200, { 'Content-Type': contentTypes[extname(filePath)] || 'application/octet-stream' });
-  response.end(readFileSync(filePath));
-}).listen(4175, '0.0.0.0', () => console.log('Daymark HTTPS server: https://172.16.0.218:4175'));
+export async function sendAssignmentEmail({ email, title, date, time, quote }) {
+  if (!sendgridApiKey) {
+    throw new Error('SENDGRID_API_KEY is missing.');
+  }
+
+  const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'hello@yourdomain.com';
+  const msg = {
+    to: email,
+    from: { email: fromEmail, name: 'Daymark' },
+    subject: `Daymark reminder: ${title}`,
+    text: `Assignment: ${title}\nDue: ${date} at ${time}\nMotivational quote: ${quote}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; color: #1f2937;">
+        <h2 style="margin-bottom: 12px;">Daymark reminder</h2>
+        <p><strong>Assignment:</strong> ${title}</p>
+        <p><strong>Due date:</strong> ${date}</p>
+        <p><strong>Time:</strong> ${time}</p>
+        <p style="margin-top: 18px; color: #3b82f6;"><strong>Motivational quote:</strong> “${quote}”</p>
+      </div>
+    `
+  };
+
+  const response = await sgMail.send(msg);
+  return response;
+}

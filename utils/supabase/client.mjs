@@ -1,0 +1,11 @@
+import { createBrowserClient } from '@supabase/ssr';
+
+const supabaseUrl = import.meta.env?.NEXT_PUBLIC_SUPABASE_URL;
+const supabaseKey = import.meta.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+
+export const createClient = () => {
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Supabase environment variables are missing.');
+  }
+  return createBrowserClient(supabaseUrl, supabaseKey);
+};
