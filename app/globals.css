@@ -16,6 +16,34 @@ body { margin: 0; background: var(--paper); color: var(--ink); font-family: 'DM 
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 .hidden { display: none !important; }
+.auth-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; max-width: 640px; }
+.auth-panel { display: grid; align-content: start; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--shadow); }
+.auth-choice { width: 100%; color: var(--ink); text-align: left; }
+.auth-choice:hover, .auth-choice:focus-visible { border-color: var(--teal); }
+.auth-choice-title { font-family: Fraunces, serif; font-size: 22px; }
+.auth-choice-description { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
+.auth-fields { display: grid; gap: 16px; width: 100%; max-width: 520px; margin-top: 14px; }
+.auth-fields .primary-button { margin-top: 0; }
+.auth-back-button { justify-self: start; padding: 0; border: 0; background: transparent; color: var(--muted); }
+.password-control { position: relative; display: block; }
+.password-control input { padding-right: 64px; }
+.password-toggle { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); padding: 6px; border: 0; background: transparent; color: var(--teal); font-size: 12px; font-weight: 700; }
+.guest-button, .auth-content .form-error { width: 100%; max-width: 640px; }
+.guest-button { margin-top: 14px; }
+.topbar-actions .avatar { display: grid; place-items: center; width: 68px; height: 68px; padding: 0; font-size: 11px; line-height: 1; text-align: center; }
+.assignment-list .assignment-item .complete-button { display: grid; place-items: center; padding: 0; border-color: #697e84; line-height: 1; text-align: center; }
+.finished-dialog { width: min(560px, calc(100% - 28px)); }
+.finished-dialog .dialog-card { max-height: min(80vh, 720px); overflow-y: auto; }
+.finished-list { display: grid; max-height: 52vh; overflow-y: auto; }
+.finished-item { display: grid; grid-template-columns: 5px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.finished-bar { width: 5px; height: 38px; background: var(--assignment-accent, var(--teal)); }
+.finished-readd-button { padding: 8px 10px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 12px; white-space: nowrap; }
+.finished-readd-button:hover { border-color: var(--teal); }
+.complete-button:hover, .assignment-item.completed .complete-button { border-color: var(--ink); }
+.assignment-actions { display: flex; align-items: center; gap: 6px; }
+.edit-button { min-height: 28px; padding: 0 9px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 11px; }
+.edit-button:hover { border-color: var(--teal); }
+@media (max-width: 480px) { .auth-panels { grid-template-columns: 1fr; } }
 .app-shell { min-height: 100vh; }
 .auth-view { min-height: 100vh; display: grid; grid-template-columns: minmax(280px, .9fr) 1.1fr; background: var(--paper); }
 .auth-art { position: relative; overflow: hidden; background: #c9e4ec; min-height: 100vh; }

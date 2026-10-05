@@ -27,14 +27,25 @@
         <p class="eyebrow">DAYMARK / PERSONAL PLANNER</p>
         <h1>A calmer place<br /><em>to get things done.</em></h1>
         <p class="auth-copy">Keep deadlines visible, make space for what matters, and let your future self get a gentle nudge.</p>
-        <form id="authForm" class="auth-form">
-          <label>Email <input id="emailInput" type="email" autocomplete="email" placeholder="Optional — you@example.com" /></label>
-          <label>Password <input id="passwordInput" type="password" autocomplete="current-password" placeholder="Optional for guest access" minlength="6" /></label>
-          <p class="form-error" id="authError" role="alert"></p>
-          <button class="primary-button" type="submit"><span id="authSubmitLabel">Enter your planner</span><span aria-hidden="true">→</span></button>
-          <button class="secondary-button" id="guestAccessButton" type="button">Continue as guest</button>
+        <div class="auth-panels">
+          <button class="auth-panel auth-choice" id="showSignUpButton" type="button"><span class="auth-choice-title">Sign up</span><span class="auth-choice-description">Create your account <span aria-hidden="true">→</span></span></button>
+          <button class="auth-panel auth-choice" id="showLoginButton" type="button"><span class="auth-choice-title">Log in</span><span class="auth-choice-description">Welcome back <span aria-hidden="true">→</span></span></button>
+        </div>
+        <p class="form-error" id="authError" role="alert"></p>
+        <form id="signUpForm" class="auth-fields hidden">
+          <button class="auth-back-button" data-auth-back type="button">← Back</button>
+          <label>Username (email) <input id="signUpEmail" type="email" autocomplete="username" required /></label>
+          <label>Password <span class="password-control"><input id="signUpPassword" type="password" autocomplete="new-password" minlength="6" required /><button class="password-toggle" data-password-target="signUpPassword" type="button" aria-label="Show password">Show</button></span></label>
+          <button class="primary-button" type="submit">Create account <span aria-hidden="true">→</span></button>
         </form>
-        <p class="auth-hint">Skip email if you want quick guest access, or sign in to save your own planner.</p>
+        <form id="loginForm" class="auth-fields hidden">
+          <button class="auth-back-button" data-auth-back type="button">← Back</button>
+          <label>Username (email) <input id="loginEmail" type="email" autocomplete="username" required /></label>
+          <label>Password <span class="password-control"><input id="loginPassword" type="password" autocomplete="current-password" required /><button class="password-toggle" data-password-target="loginPassword" type="button" aria-label="Show password">Show</button></span></label>
+          <button class="primary-button" type="submit">Log in <span aria-hidden="true">→</span></button>
+        </form>
+        <button class="secondary-button guest-button" id="guestAccessButton" type="button">Continue as guest</button>
+        <p class="auth-hint">Create an account, log in, or continue as a guest.</p>
       </div>
     </section>
 
@@ -43,7 +54,7 @@
         <div class="brand-mark"><span class="brand-dot"></span>daymark</div>
         <div class="topbar-actions">
           <button class="icon-button notification-button" id="notificationButton" aria-label="Enable browser reminders" title="Enable browser reminders">♧<span class="notification-dot hidden" id="notificationDot"></span></button>
-          <button class="avatar" id="profileButton" aria-label="Sign out">JD</button>
+          <button class="avatar" id="profileButton" aria-label="Home" title="Home">Home</button>
         </div>
       </header>
 
@@ -91,6 +102,7 @@
         <button class="nav-item active"><span>▦</span>Overview</button>
         <button class="nav-item" id="navAdd"><span>＋</span>Add</button>
         <button class="nav-item" id="navReminders"><span>◷</span>Reminders</button>
+        <button class="nav-item" id="signOutButton"><span>↪</span>Sign out</button>
       </nav>
     </section>
   </main>

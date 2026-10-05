@@ -18,7 +18,8 @@ const dailyQuotes = [
 const state = {
   user: null,
   assignments: [],
-  viewDate: new Date()
+  viewDate: new Date(),
+  editingAssignmentId: null
 };
 
 const colorMap = {
@@ -47,9 +48,67 @@ const assignmentTypes = {
 const $ = (selector) => document.querySelector(selector);
 const authView = $('#authView');
 const plannerView = $('#plannerView');
-const authForm = $('#authForm');
+const signUpForm = $('#signUpForm');
+const loginForm = $('#loginForm');
 const assignmentDialog = $('#assignmentDialog');
 const assignmentForm = $('#assignmentForm');
+
+function setupFinishedView() {
+  const finishedButton = document.createElement('button');
+  finishedButton.type = 'button';
+  finishedButton.className = 'nav-item';
+  finishedButton.id = 'navFinished';
+  finishedButton.innerHTML = '<span aria-hidden="true">✓</span>Finished';
+  $('#navReminders').insertAdjacentElement('afterend', finishedButton);
+
+  const dialog = document.createElement('dialog');
+  dialog.id = 'finishedDialog';
+  dialog.className = 'assignment-dialog finished-dialog';
+  dialog.setAttribute('aria-labelledby', 'finishedTitle');
+  dialog.innerHTML = '<section class="dialog-card"><button class="close-button" id="closeFinishedButton" type="button" aria-label="Close">×</button><p class="section-kicker">COMPLETED</p><h2 id="finishedTitle">Recently finished</h2><div class="finished-list" id="finishedList"></div></section>';
+  document.body.append(dialog);
+
+  finishedButton.addEventListener('click', () => {
+    renderFinishedAssignments();
+    dialog.showModal();
+  });
+  $('#closeFinishedButton').addEventListener('click', () => dialog.close());
+}
+
+setupFinishedView();
+
+function setupAuthForms() {
+  const authPanels = $('.auth-panels');
+  const showForm = (form) => {
+    authPanels.classList.add('hidden');
+    signUpForm.classList.toggle('hidden', form !== signUpForm);
+    loginForm.classList.toggle('hidden', form !== loginForm);
+    $('#authError').textContent = '';
+    form.querySelector('input').focus();
+  };
+
+  $('#showSignUpButton').addEventListener('click', () => showForm(signUpForm));
+  $('#showLoginButton').addEventListener('click', () => showForm(loginForm));
+  document.querySelectorAll('[data-auth-back]').forEach((button) => {
+    button.addEventListener('click', () => {
+      signUpForm.classList.add('hidden');
+      loginForm.classList.add('hidden');
+      authPanels.classList.remove('hidden');
+      $('#authError').textContent = '';
+    });
+  });
+  document.querySelectorAll('.password-toggle').forEach((button) => {
+    button.addEventListener('click', () => {
+      const input = $(`#${button.dataset.passwordTarget}`);
+      const showPassword = input.type === 'password';
+      input.type = showPassword ? 'text' : 'password';
+      button.textContent = showPassword ? 'Hide' : 'Show';
+      button.setAttribute('aria-label', `${showPassword ? 'Hide' : 'Show'} password`);
+    });
+  });
+}
+
+setupAuthForms();
 
 function setupAssignmentTypeField() {
   const colorField = $('.color-choice');
@@ -93,7 +152,6 @@ function saveUserData() {
   if (!state.user) return;
   const saved = JSON.parse(localStorage.getItem(storageKey(state.user.email)) || '{}');
   localStorage.setItem(storageKey(state.user.email), JSON.stringify({ ...saved, assignments: state.assignments }));
-  syncAssignmentsToServer();
 }
 function loadUserData() {
   const saved = JSON.parse(localStorage.getItem(storageKey(state.user.email)) || '{}');
@@ -145,15 +203,45 @@ function getSelectedAssignmentColor() {
   return { type, color: type, colorHex: colorMap[type] };
 }
 
+function setAssignmentDialogMode(editing) {
+  $('#assignmentDialog .section-kicker').textContent = editing ? 'EDIT ENTRY' : 'NEW ENTRY';
+  $('#assignmentDialog h2').textContent = editing ? 'Update your plan.' : 'Make it visible.';
+  $('#assignmentForm button[type="submit"]').textContent = editing ? 'Save changes' : 'Save assignment';
+}
+
+function openNewAssignment(date = dateKey()) {
+  state.editingAssignmentId = null;
+  assignmentForm.reset();
+  $('#assignmentDate').value = date;
+  $('#assignmentTime').value = '17:00';
+  setAssignmentDialogMode(false);
+  assignmentDialog.showModal();
+}
+
+function openEditAssignment(id) {
+  const assignment = state.assignments.find((item) => item.id === id);
+  if (!assignment) return;
+
+  state.editingAssignmentId = id;
+  $('#assignmentTitle').value = assignment.title;
+  $('#assignmentDate').value = assignment.date;
+  $('#assignmentTime').value = assignment.time;
+  $('#assignmentReminder').value = assignment.reminder || '60';
+  $('#assignmentType').value = assignmentTypes[assignment.type] ? assignment.type : 'homework';
+  setAssignmentDialogMode(true);
+  assignmentDialog.showModal();
+}
+
 function renderAgenda() {
   const list = $('#assignmentList');
   const upcoming = [...state.assignments].filter((item) => !item.completed).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   list.innerHTML = upcoming.length ? upcoming.slice(0, 5).map((item) => {
     const accent = item.colorHex || colorMap[item.color] || colorMap.coral;
     const typeLabel = assignmentTypes[item.type] || '';
-    return `<article class="assignment-item ${item.color === 'custom' ? 'custom' : item.color}" data-id="${item.id}" style="--assignment-accent: ${accent};"><span class="assignment-bar" style="background: ${accent};"></span><div><p class="assignment-title">${item.title}</p><p class="assignment-meta">${typeLabel ? `${typeLabel} · ` : ''}${formatDate(item.date)} · ${formatTime(item.time)} · remind ${item.reminder === 'daily' ? 'every day' : item.reminder === '0' ? 'at due time' : `${item.reminder}m before`}</p></div><button class="complete-button" aria-label="Complete ${item.title}">✓</button></article>`;
+    return `<article class="assignment-item ${item.color === 'custom' ? 'custom' : item.color}" data-id="${item.id}" style="--assignment-accent: ${accent};"><span class="assignment-bar" style="background: ${accent};"></span><div><p class="assignment-title">${item.title}</p><p class="assignment-meta">${typeLabel ? `${typeLabel} · ` : ''}${formatDate(item.date)} · ${formatTime(item.time)} · remind ${item.reminder === 'daily' ? 'every day' : item.reminder === '0' ? 'at due time' : `${item.reminder}m before`}</p></div><div class="assignment-actions"><button class="edit-button" type="button" aria-label="Edit ${item.title}">Edit</button><button class="complete-button" type="button" aria-label="Complete ${item.title}">✓</button></div></article>`;
   }).join('') : '<p class="empty-state">Your agenda is open. Add something worth remembering.</p>';
   list.querySelectorAll('.complete-button').forEach((button) => button.addEventListener('click', () => completeAssignment(button.closest('.assignment-item').dataset.id)));
+  list.querySelectorAll('.edit-button').forEach((button) => button.addEventListener('click', () => openEditAssignment(button.closest('.assignment-item').dataset.id)));
   const next = upcoming[0];
   $('#nextUpTitle').textContent = next ? next.title : 'Your day is clear.';
   $('#nextUpMeta').textContent = next ? `${formatDate(next.date)} at ${formatTime(next.time)}` : 'Add an assignment to see it here.';
@@ -167,7 +255,74 @@ function renderAgenda() {
   $('#progressLabel').textContent = `${weekCount} assignment${weekCount === 1 ? '' : 's'} due`;
   $('#progressBar').style.width = `${Math.min(100, weekCount * 24)}%`;
 }
-function completeAssignment(id) { state.assignments = state.assignments.map((item) => item.id === id ? { ...item, completed: true } : item); saveUserData(); renderAll(); showToast('Marked complete. Nice work.'); }
+function completeAssignment(id) {
+  const completedAt = new Date().toISOString();
+  state.assignments = state.assignments.map((item) => item.id === id ? { ...item, completed: true, completedAt } : item);
+  saveUserData(); renderAll(); showToast('Marked complete. Nice work.');
+}
+function reAddAssignment(id) {
+  state.assignments = state.assignments.map((item) => {
+    if (item.id !== id) return item;
+    const { completedAt, ...assignment } = item;
+    return { ...assignment, completed: false };
+  });
+  saveUserData();
+  renderAll();
+  renderFinishedAssignments();
+  showToast('Added back to your agenda.');
+}
+function renderFinishedAssignments() {
+  const list = $('#finishedList');
+  const completed = state.assignments.filter((item) => item.completed).sort((first, second) => {
+    const firstDate = first.completedAt ? Date.parse(first.completedAt) : null;
+    const secondDate = second.completedAt ? Date.parse(second.completedAt) : null;
+    if (firstDate !== null && secondDate === null) return -1;
+    if (firstDate === null && secondDate !== null) return 1;
+    if (firstDate !== null && secondDate !== null) return secondDate - firstDate;
+    return String(second.date).localeCompare(String(first.date));
+  });
+  list.replaceChildren();
+
+  if (!completed.length) {
+    const emptyState = document.createElement('p');
+    emptyState.className = 'empty-state';
+    emptyState.textContent = 'No finished assignments yet.';
+    list.append(emptyState);
+    return;
+  }
+
+  completed.forEach((item) => {
+    const accent = item.colorHex || colorMap[item.color] || colorMap.coral;
+    const article = document.createElement('article');
+    article.className = 'finished-item';
+    article.style.setProperty('--assignment-accent', accent);
+
+    const bar = document.createElement('span');
+    bar.className = 'finished-bar';
+    const details = document.createElement('div');
+    const title = document.createElement('p');
+    title.className = 'assignment-title';
+    title.textContent = item.title;
+    const meta = document.createElement('p');
+    meta.className = 'assignment-meta';
+    const typeLabel = assignmentTypes[item.type];
+    const completedDate = item.completedAt ? new Date(item.completedAt) : null;
+    const completedLabel = completedDate && !Number.isNaN(completedDate.getTime())
+      ? completedDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : 'Previously completed';
+    meta.textContent = `${typeLabel ? `${typeLabel} · ` : ''}Due ${formatDate(item.date)} · Finished ${completedLabel}`;
+    const reAddButton = document.createElement('button');
+    reAddButton.type = 'button';
+    reAddButton.className = 'finished-readd-button';
+    reAddButton.textContent = 'Re-add';
+    reAddButton.setAttribute('aria-label', `Re-add ${item.title} to your agenda`);
+    reAddButton.addEventListener('click', () => reAddAssignment(item.id));
+
+    details.append(title, meta);
+    article.append(bar, details, reAddButton);
+    list.append(article);
+  });
+}
 function getDailyQuote(date = new Date()) {
   const start = new Date(date.getFullYear(), 0, 0);
   const dayNumber = Math.floor((date - start) / 86400000);
@@ -180,16 +335,6 @@ function renderDailyQuote() {
 }
 
 function renderAll() { renderCalendar(); renderAgenda(); renderDailyQuote(); }
-function syncAssignmentsToServer() {
-  if (!state.user || state.user.email === 'guest') return;
-  const apiUrl = location.protocol === 'https:' ? '/api/reminders/sync' : `https://${location.hostname}:4175/api/reminders/sync`;
-  fetch(apiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: state.user.email, assignments: state.assignments })
-  }).catch((error) => console.error('Reminder sync failed:', error));
-}
-
 function checkReminders() {
   const now = new Date();
   const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -210,7 +355,6 @@ function checkReminders() {
 }
 function openPlanner(user) {
   state.user = user; loadUserData();
-  syncAssignmentsToServer();
   const displayName = user.email === 'guest' ? 'Guest' : user.email.split('@')[0].split(/[._-]/)[0].replace(/^./, (letter) => letter.toUpperCase());
   $('#notificationButton').classList.toggle('hidden', user.email === 'guest');
   $('#assignmentReminder').closest('label').classList.toggle('hidden', user.email === 'guest');
@@ -231,43 +375,69 @@ function continueAsGuest() {
   openPlanner(guestUser);
 }
 
-authForm.addEventListener('submit', (event) => {
+function handleAccountSubmit(event, mode) {
   event.preventDefault();
-  const email = $('#emailInput').value.trim().toLowerCase();
-  const password = $('#passwordInput').value;
+  const prefix = mode === 'signup' ? 'signUp' : 'login';
+  const email = $(`#${prefix}Email`).value.trim().toLowerCase();
+  const password = $(`#${prefix}Password`).value;
+  const saved = JSON.parse(localStorage.getItem(storageKey(email)) || 'null');
 
-  if (!email && !password) {
-    continueAsGuest();
-    return;
-  }
-
-  const normalizedEmail = email || 'guest';
-
-  if (email && password && password.length < 6) {
+  if (password.length < 6) {
     $('#authError').textContent = 'Passwords must be at least 6 characters.';
     return;
   }
 
-  if (email) {
-    const saved = JSON.parse(localStorage.getItem(storageKey(normalizedEmail)) || 'null');
-    if (saved?.password && saved.password !== password) {
+  if (mode === 'signup') {
+    if (saved?.password) {
+      $('#authError').textContent = 'An account already exists for this email. Log in instead.';
+      return;
+    }
+    localStorage.setItem(storageKey(email), JSON.stringify({ ...(saved || {}), password, assignments: saved?.assignments || [] }));
+  } else {
+    if (!saved?.password) {
+      $('#authError').textContent = 'No account found for this email. Sign up first.';
+      return;
+    }
+    if (saved.password !== password) {
       $('#authError').textContent = 'That password does not match this account.';
       return;
     }
-    localStorage.setItem(storageKey(normalizedEmail), JSON.stringify({ ...(saved || {}), password: password || saved?.password || '', assignments: saved?.assignments || [] }));
   }
 
-  const user = { email: normalizedEmail };
+  const user = { email };
   localStorage.setItem('daymark-session', JSON.stringify(user));
   $('#authError').textContent = '';
   openPlanner(user);
-});
+}
+
+signUpForm.addEventListener('submit', (event) => handleAccountSubmit(event, 'signup'));
+loginForm.addEventListener('submit', (event) => handleAccountSubmit(event, 'login'));
 
 $('#guestAccessButton').addEventListener('click', continueAsGuest);
-$('#profileButton').addEventListener('click', () => { localStorage.removeItem('daymark-session'); plannerView.classList.add('hidden'); authView.classList.remove('hidden'); authForm.reset(); });
-$('#openAddButton').addEventListener('click', () => { $('#assignmentDate').value = dateKey(); assignmentDialog.showModal(); });
+function returnToAuth() {
+  if (assignmentDialog.open) assignmentDialog.close();
+  localStorage.removeItem('daymark-session');
+  plannerView.classList.add('hidden');
+  authView.classList.remove('hidden');
+  signUpForm.reset();
+  loginForm.reset();
+  $('.auth-panels').classList.remove('hidden');
+  signUpForm.classList.add('hidden');
+  loginForm.classList.add('hidden');
+  $('#authError').textContent = '';
+  window.scrollTo(0, 0);
+}
+$('#profileButton').addEventListener('click', returnToAuth);
+$('#signOutButton').addEventListener('click', returnToAuth);
+$('#openAddButton').addEventListener('click', () => openNewAssignment());
 $('#closeAssignmentButton').addEventListener('click', () => assignmentDialog.close());
-$('#navAdd').addEventListener('click', () => { $('#assignmentDate').value = dateKey(); assignmentDialog.showModal(); });
+$('#navAdd').addEventListener('click', () => openNewAssignment());
+assignmentDialog.addEventListener('close', () => {
+  state.editingAssignmentId = null;
+  assignmentForm.reset();
+  $('#assignmentTime').value = '17:00';
+  setAssignmentDialogMode(false);
+});
 $('#prevMonth').addEventListener('click', () => { state.viewDate.setMonth(state.viewDate.getMonth() - 1); renderCalendar(); });
 $('#nextMonth').addEventListener('click', () => { state.viewDate.setMonth(state.viewDate.getMonth() + 1); renderCalendar(); });
 $('#navReminders').addEventListener('click', () => { const next = state.assignments.find((item) => !item.completed); showToast(next ? `Next reminder: ${next.title}` : 'No reminders yet.'); });
@@ -276,8 +446,14 @@ $('#notificationButton').addEventListener('click', async () => { if (!('Notifica
 assignmentForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const { type, color, colorHex } = getSelectedAssignmentColor();
-  state.assignments.push({ id: crypto.randomUUID(), title: $('#assignmentTitle').value.trim(), date: $('#assignmentDate').value, time: $('#assignmentTime').value, reminder: $('#assignmentReminder').value, type, color, colorHex, completed: false });
-  saveUserData(); assignmentDialog.close(); assignmentForm.reset(); $('#assignmentTime').value = '17:00'; renderAll(); showToast('Assignment saved to your agenda.');
+  const editing = Boolean(state.editingAssignmentId);
+  const newAssignment = { id: state.editingAssignmentId || crypto.randomUUID(), title: $('#assignmentTitle').value.trim(), date: $('#assignmentDate').value, time: $('#assignmentTime').value, reminder: $('#assignmentReminder').value, type, color, colorHex, completed: false };
+  if (editing) {
+    state.assignments = state.assignments.map((item) => item.id === state.editingAssignmentId ? { ...item, ...newAssignment } : item);
+  } else {
+    state.assignments.push(newAssignment);
+  }
+  saveUserData(); assignmentDialog.close(); renderAll(); showToast(editing ? 'Assignment updated.' : 'Assignment saved to your agenda.');
 });
 
 const existingUser = getStoredUser();
