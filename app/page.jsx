@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { createClient } from '../utils/supabase/client.mjs';
 
 const plannerMarkup = `
   <main class="app-shell">
@@ -57,6 +58,12 @@ const plannerMarkup = `
 
 export default function Page() {
   useEffect(() => {
+    try {
+      window.daymarkSupabase = window.daymarkSupabase || createClient();
+    } catch (error) {
+      const authError = document.getElementById('authError');
+      if (authError) authError.textContent = error.message;
+    }
     if (window.__daymarkLoaded) return undefined;
     window.__daymarkLoaded = true;
     const script = document.createElement('script');

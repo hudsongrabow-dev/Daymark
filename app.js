@@ -144,6 +144,12 @@ function setupAssignmentTypeField() {
 setupAssignmentTypeField();
 
 function storageKey(email) { return `daymark:${email}`; }
+function getSupabaseClient() {
+  if (!window.daymarkSupabase) {
+    throw new Error('Supabase is not available. Use guest mode or open the hosted website.');
+  }
+  return window.daymarkSupabase;
+}
 function dateKey(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -151,11 +157,87 @@ function getStoredUser() { return JSON.parse(localStorage.getItem('daymark-sessi
 function saveUserData() {
   if (!state.user) return;
   const saved = JSON.parse(localStorage.getItem(storageKey(state.user.email)) || '{}');
+  if (state.user.id) {
+    delete saved.password;
+    localStorage.setItem(storageKey(state.user.email), JSON.stringify({ ...saved, assignments: state.assignments }));
+    const rows = state.assignments.map((assignment) => ({
+      id: assignment.id,
+      user_id: state.user.id,
+      title: assignment.title,
+      due_date: assignment.date,
+      due_time: `${assignment.time}:00`,
+      reminder: String(assignment.reminder ?? '60'),
+      type: assignment.type || null,
+      color: assignment.color || null,
+      color_hex: assignment.colorHex || null,
+      completed: Boolean(assignment.completed),
+      completed_at: assignment.completedAt || null
+    }));
+    return getSupabaseClient().from('assignments').upsert(rows, { onConflict: 'user_id,id' }).then(({ error }) => {
+      if (error) throw error;
+    });
+  }
   localStorage.setItem(storageKey(state.user.email), JSON.stringify({ ...saved, assignments: state.assignments }));
 }
 function loadUserData() {
   const saved = JSON.parse(localStorage.getItem(storageKey(state.user.email)) || '{}');
   state.assignments = saved.assignments || [];
+}
+async function loadCloudAssignments(user) {
+  const supabase = getSupabaseClient();
+  const key = storageKey(user.email);
+  const saved = JSON.parse(localStorage.getItem(key) || '{}');
+  const localAssignments = Array.isArray(saved.assignments) ? saved.assignments : [];
+  const { data: cloudResult, error: loadError } = await supabase.functions.invoke('get-assignments', { method: 'GET' });
+  if (loadError) throw loadError;
+  if (!Array.isArray(cloudResult?.assignments)) {
+    throw new Error('The assignments function returned an invalid response.');
+  }
+
+  const cloudRows = cloudResult.assignments;
+  const cloudIds = new Set(cloudRows.map((assignment) => assignment.id));
+  const assignmentsToMigrate = localAssignments.filter((assignment) => !cloudIds.has(assignment.id));
+
+  if (assignmentsToMigrate.length) {
+    const rows = assignmentsToMigrate.map((assignment) => ({
+      id: assignment.id,
+      user_id: user.id,
+      title: assignment.title,
+      due_date: assignment.date,
+      due_time: `${assignment.time}:00`,
+      reminder: String(assignment.reminder ?? '60'),
+      type: assignment.type || null,
+      color: assignment.color || null,
+      color_hex: assignment.colorHex || null,
+      completed: Boolean(assignment.completed),
+      completed_at: assignment.completedAt || null
+    }));
+    const { error } = await supabase.from('assignments').upsert(rows, { onConflict: 'user_id,id' });
+    if (error) throw error;
+  }
+
+  const result = assignmentsToMigrate.length
+    ? await supabase.functions.invoke('get-assignments', { method: 'GET' })
+    : { data: cloudResult, error: null };
+  if (result.error) throw result.error;
+  if (!Array.isArray(result.data?.assignments)) {
+    throw new Error('The assignments function returned an invalid response.');
+  }
+
+  state.assignments = result.data.assignments.map((assignment) => ({
+    id: assignment.id,
+    title: assignment.name,
+    date: assignment.dueDate,
+    time: assignment.dueTime,
+    reminder: assignment.reminder,
+    type: assignment.type,
+    color: assignment.color,
+    colorHex: assignment.colorHex,
+    completed: assignment.completed,
+    ...(assignment.completedAt ? { completedAt: assignment.completedAt } : {})
+  }));
+  delete saved.password;
+  localStorage.setItem(key, JSON.stringify({ ...saved, assignments: state.assignments }));
 }
 function formatDate(dateString, includeDay = true) {
   const date = new Date(`${dateString}T12:00:00`);
@@ -255,21 +337,31 @@ function renderAgenda() {
   $('#progressLabel').textContent = `${weekCount} assignment${weekCount === 1 ? '' : 's'} due`;
   $('#progressBar').style.width = `${Math.min(100, weekCount * 24)}%`;
 }
-function completeAssignment(id) {
+async function completeAssignment(id) {
   const completedAt = new Date().toISOString();
   state.assignments = state.assignments.map((item) => item.id === id ? { ...item, completed: true, completedAt } : item);
-  saveUserData(); renderAll(); showToast('Marked complete. Nice work.');
+  renderAll();
+  try {
+    await saveUserData();
+    showToast('Marked complete. Nice work.');
+  } catch (error) {
+    showToast(`Could not sync assignment: ${error.message}`);
+  }
 }
-function reAddAssignment(id) {
+async function reAddAssignment(id) {
   state.assignments = state.assignments.map((item) => {
     if (item.id !== id) return item;
     const { completedAt, ...assignment } = item;
     return { ...assignment, completed: false };
   });
-  saveUserData();
   renderAll();
   renderFinishedAssignments();
-  showToast('Added back to your agenda.');
+  try {
+    await saveUserData();
+    showToast('Added back to your agenda.');
+  } catch (error) {
+    showToast(`Could not sync assignment: ${error.message}`);
+  }
 }
 function renderFinishedAssignments() {
   const list = $('#finishedList');
@@ -404,14 +496,22 @@ function checkReminders() {
     }
   });
 }
-function openPlanner(user) {
-  state.user = user; loadUserData();
+async function openPlanner(user) {
+  if (user.email === 'guest') {
+    state.user = user;
+    loadUserData();
+  } else {
+    await loadCloudAssignments(user);
+    state.user = user;
+  }
   const displayName = user.email === 'guest' ? 'Guest' : user.email.split('@')[0].split(/[._-]/)[0].replace(/^./, (letter) => letter.toUpperCase());
   $('#notificationButton').classList.toggle('hidden', user.email === 'guest');
   $('#assignmentReminder').closest('label').classList.toggle('hidden', user.email === 'guest');
   $('#firstName').textContent = displayName;
   $('#todayLabel').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
-  authView.classList.add('hidden'); plannerView.classList.remove('hidden'); renderAll();
+  authView.classList.add('hidden');
+  plannerView.classList.remove('hidden');
+  renderAll();
 }
 
 function continueAsGuest() {
@@ -423,51 +523,71 @@ function continueAsGuest() {
   }));
   localStorage.setItem('daymark-session', JSON.stringify(guestUser));
   $('#authError').textContent = '';
-  openPlanner(guestUser);
+  void openPlanner(guestUser);
 }
 
-function handleAccountSubmit(event, mode) {
+async function handleAccountSubmit(event, mode) {
   event.preventDefault();
   const prefix = mode === 'signup' ? 'signUp' : 'login';
   const email = $(`#${prefix}Email`).value.trim().toLowerCase();
   const password = $(`#${prefix}Password`).value;
-  const saved = JSON.parse(localStorage.getItem(storageKey(email)) || 'null');
 
   if (password.length < 6) {
     $('#authError').textContent = 'Passwords must be at least 6 characters.';
     return;
   }
 
-  if (mode === 'signup') {
-    if (saved?.password) {
-      $('#authError').textContent = 'An account already exists for this email. Log in instead.';
-      return;
-    }
-    localStorage.setItem(storageKey(email), JSON.stringify({ ...(saved || {}), password, assignments: saved?.assignments || [] }));
-  } else {
-    if (!saved?.password) {
-      $('#authError').textContent = 'No account found for this email. Sign up first.';
-      return;
-    }
-    if (saved.password !== password) {
-      $('#authError').textContent = 'That password does not match this account.';
-      return;
-    }
-  }
-
-  const user = { email };
-  localStorage.setItem('daymark-session', JSON.stringify(user));
   $('#authError').textContent = '';
-  openPlanner(user);
+  try {
+    const supabase = getSupabaseClient();
+    const result = mode === 'signup'
+      ? await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: window.location.origin }
+      })
+      : await supabase.auth.signInWithPassword({ email, password });
+    if (result.error) throw result.error;
+
+    if (mode === 'signup' && !result.data.session) {
+      const saved = JSON.parse(localStorage.getItem(storageKey(email)) || '{}');
+      delete saved.password;
+      localStorage.setItem(storageKey(email), JSON.stringify(saved));
+      $('#authError').textContent = 'Check your email to confirm your account, then log in.';
+      return;
+    }
+    if (!result.data.user) {
+      throw new Error('No signed-in user was returned.');
+    }
+
+    const saved = JSON.parse(localStorage.getItem(storageKey(email)) || '{}');
+    delete saved.password;
+    localStorage.setItem(storageKey(email), JSON.stringify(saved));
+    localStorage.removeItem('daymark-session');
+    await openPlanner(result.data.user);
+  } catch (error) {
+    $('#authError').textContent = error.message;
+  }
 }
 
 signUpForm.addEventListener('submit', (event) => handleAccountSubmit(event, 'signup'));
 loginForm.addEventListener('submit', (event) => handleAccountSubmit(event, 'login'));
 
 $('#guestAccessButton').addEventListener('click', continueAsGuest);
-function returnToAuth() {
+async function returnToAuth() {
+  if (state.user?.id) {
+    try {
+      const { error } = await getSupabaseClient().auth.signOut();
+      if (error) throw error;
+    } catch (error) {
+      showToast(`Could not sign out: ${error.message}`);
+      return;
+    }
+  }
   if (assignmentDialog.open) assignmentDialog.close();
   localStorage.removeItem('daymark-session');
+  state.user = null;
+  state.assignments = [];
   plannerView.classList.add('hidden');
   authView.classList.remove('hidden');
   signUpForm.reset();
@@ -478,8 +598,8 @@ function returnToAuth() {
   $('#authError').textContent = '';
   window.scrollTo(0, 0);
 }
-$('#profileButton').addEventListener('click', returnToAuth);
-$('#signOutButton').addEventListener('click', returnToAuth);
+$('#profileButton').addEventListener('click', () => returnToAuth());
+$('#signOutButton').addEventListener('click', () => returnToAuth());
 $('#openAddButton').addEventListener('click', () => openNewAssignment());
 $('#closeAssignmentButton').addEventListener('click', () => assignmentDialog.close());
 $('#navAdd').addEventListener('click', () => openNewAssignment());
@@ -515,17 +635,40 @@ assignmentForm.addEventListener('submit', async (event) => {
   } else {
     state.assignments.push(newAssignment);
   }
-  saveUserData();
+  let syncError = null;
+  try {
+    await saveUserData();
+  } catch (error) {
+    syncError = error;
+  }
   if (!editing) await sendAssignmentNotification(newAssignment);
 
   assignmentDialog.close();
   assignmentForm.reset();
   $('#assignmentTime').value = '17:00';
   renderAll();
-  showToast('Assignment saved to your agenda.');
+  showToast(syncError
+    ? `Saved locally but could not sync: ${syncError.message}`
+    : 'Assignment saved to your agenda.');
 });
 
 const existingUser = getStoredUser();
-if (existingUser) openPlanner(existingUser);
+if (window.daymarkSupabase) {
+  window.daymarkSupabase.auth.getUser().then(({ data, error }) => {
+    if (error) throw error;
+    if (data.user) {
+      localStorage.removeItem('daymark-session');
+      return openPlanner(data.user);
+    }
+    if (existingUser?.email === 'guest') return openPlanner(existingUser);
+    localStorage.removeItem('daymark-session');
+  }).catch((error) => {
+    $('#authError').textContent = `Could not check your session: ${error.message}`;
+  });
+} else if (existingUser?.email === 'guest') {
+  void openPlanner(existingUser);
+} else {
+  localStorage.removeItem('daymark-session');
+}
 scheduleDailyQuoteRefresh();
 setInterval(checkReminders, 30000);

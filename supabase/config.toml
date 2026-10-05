@@ -1,0 +1,4 @@
+project_id = "daymark"
+
+[functions.get-assignments]
+verify_jwt = true
