@@ -28,7 +28,20 @@ const colorMap = {
   lavender: '#a995d8',
   mint: '#7fc8b0',
   sky: '#77b9e9',
-  custom: '#ee7e67'
+  custom: '#ee7e67',
+  test: '#ee7e67',
+  quiz: '#77b9e9',
+  homework: '#3b9daa',
+  priority: '#eabf60',
+  personal: '#a995d8'
+};
+
+const assignmentTypes = {
+  test: 'Test',
+  quiz: 'Quiz',
+  homework: 'Homework',
+  priority: 'Priority',
+  personal: 'Personal'
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -37,6 +50,39 @@ const plannerView = $('#plannerView');
 const authForm = $('#authForm');
 const assignmentDialog = $('#assignmentDialog');
 const assignmentForm = $('#assignmentForm');
+
+function setupAssignmentTypeField() {
+  const colorField = $('.color-choice');
+  if (!colorField) return;
+
+  const label = document.createElement('label');
+  label.className = 'type-choice';
+  label.append('Type');
+
+  const select = document.createElement('select');
+  select.id = 'assignmentType';
+  select.required = true;
+
+  const placeholder = document.createElement('option');
+  placeholder.value = '';
+  placeholder.textContent = 'Choose a type';
+  placeholder.disabled = true;
+  placeholder.selected = true;
+  select.append(placeholder);
+
+  Object.entries(assignmentTypes).forEach(([value, text]) => {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = text;
+    select.append(option);
+  });
+
+  label.append(select);
+  colorField.replaceWith(label);
+  $('#customColorWrapper')?.remove();
+}
+
+setupAssignmentTypeField();
 
 function storageKey(email) { return `daymark:${email}`; }
 function dateKey(date = new Date()) {
@@ -85,14 +131,18 @@ function renderCalendar() {
     const cell = document.createElement('button');
     cell.className = `calendar-day ${isCurrent ? 'current' : ''} ${today ? 'today' : ''} ${assignment ? 'has-assignment' : ''}`;
     cell.innerHTML = `<span class="day-label">${isCurrent ? dayNumber : dayNumber <= 0 ? previousMonthDays + dayNumber : dayNumber - daysInMonth}</span>${assignment ? `<span class="day-assignment">${assignment.title}</span>` : ''}`;
+    if (assignment) {
+      const accent = assignment.colorHex || colorMap[assignment.color] || colorMap.coral;
+      cell.style.backgroundColor = `${accent}22`;
+      cell.querySelector('.day-assignment').style.color = accent;
+    }
     cell.addEventListener('click', () => { $('#assignmentDate').value = dateString; assignmentDialog.showModal(); });
     grid.appendChild(cell);
   }
 }
 function getSelectedAssignmentColor() {
-  const selected = document.querySelector('input[name="assignmentColor"]:checked')?.value || 'coral';
-  const customColor = $('#assignmentCustomColor')?.value || colorMap.custom;
-  return selected === 'custom' ? { color: 'custom', colorHex: customColor } : { color: selected, colorHex: colorMap[selected] || colorMap.coral };
+  const type = $('#assignmentType').value;
+  return { type, color: type, colorHex: colorMap[type] };
 }
 
 function renderAgenda() {
@@ -100,7 +150,8 @@ function renderAgenda() {
   const upcoming = [...state.assignments].filter((item) => !item.completed).sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
   list.innerHTML = upcoming.length ? upcoming.slice(0, 5).map((item) => {
     const accent = item.colorHex || colorMap[item.color] || colorMap.coral;
-    return `<article class="assignment-item ${item.color === 'custom' ? 'custom' : item.color}" data-id="${item.id}" style="--assignment-accent: ${accent};"><span class="assignment-bar"></span><div><p class="assignment-title">${item.title}</p><p class="assignment-meta">${formatDate(item.date)} · ${formatTime(item.time)} · remind ${item.reminder === 'daily' ? 'every day' : item.reminder === '0' ? 'at due time' : `${item.reminder}m before`}</p></div><button class="complete-button" aria-label="Complete ${item.title}">✓</button></article>`;
+    const typeLabel = assignmentTypes[item.type] || '';
+    return `<article class="assignment-item ${item.color === 'custom' ? 'custom' : item.color}" data-id="${item.id}" style="--assignment-accent: ${accent};"><span class="assignment-bar" style="background: ${accent};"></span><div><p class="assignment-title">${item.title}</p><p class="assignment-meta">${typeLabel ? `${typeLabel} · ` : ''}${formatDate(item.date)} · ${formatTime(item.time)} · remind ${item.reminder === 'daily' ? 'every day' : item.reminder === '0' ? 'at due time' : `${item.reminder}m before`}</p></div><button class="complete-button" aria-label="Complete ${item.title}">✓</button></article>`;
   }).join('') : '<p class="empty-state">Your agenda is open. Add something worth remembering.</p>';
   list.querySelectorAll('.complete-button').forEach((button) => button.addEventListener('click', () => completeAssignment(button.closest('.assignment-item').dataset.id)));
   const next = upcoming[0];
@@ -202,6 +253,8 @@ function openPlanner(user) {
   state.user = user; loadUserData();
   syncAssignmentsToServer();
   const displayName = user.email === 'guest' ? 'Guest' : user.email.split('@')[0].split(/[._-]/)[0].replace(/^./, (letter) => letter.toUpperCase());
+  $('#notificationButton').classList.toggle('hidden', user.email === 'guest');
+  $('#assignmentReminder').closest('label').classList.toggle('hidden', user.email === 'guest');
   $('#firstName').textContent = displayName;
   $('#todayLabel').textContent = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
   authView.classList.add('hidden'); plannerView.classList.remove('hidden'); renderAll();
@@ -261,23 +314,16 @@ $('#nextMonth').addEventListener('click', () => { state.viewDate.setMonth(state.
 $('#navReminders').addEventListener('click', () => { const next = state.assignments.find((item) => !item.completed); showToast(next ? `Next reminder: ${next.title}` : 'No reminders yet.'); });
 $('#notificationButton').addEventListener('click', async () => { if (!('Notification' in window)) { showToast('Browser reminders are not supported here.'); return; } const permission = await Notification.requestPermission(); if (permission === 'granted') { $('#notificationDot').classList.remove('hidden'); showToast('Browser reminders enabled.'); } else showToast('Reminders stay on inside your planner.'); });
 
-const customColorInput = $('#assignmentCustomColor');
-document.querySelectorAll('input[name="assignmentColor"]').forEach((input) => {
-  input.addEventListener('change', () => {
-    const customColorWrapper = $('#customColorWrapper');
-    customColorWrapper.classList.toggle('hidden', input.value !== 'custom');
-  });
-});
-
 assignmentForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  const { color, colorHex } = getSelectedAssignmentColor();
+  const { type, color, colorHex } = getSelectedAssignmentColor();
   const newAssignment = {
     id: crypto.randomUUID(),
     title: $('#assignmentTitle').value.trim(),
     date: $('#assignmentDate').value,
     time: $('#assignmentTime').value,
     reminder: $('#assignmentReminder').value,
+    type,
     color,
     colorHex,
     completed: false
@@ -290,8 +336,6 @@ assignmentForm.addEventListener('submit', async (event) => {
   assignmentDialog.close();
   assignmentForm.reset();
   $('#assignmentTime').value = '17:00';
-  customColorInput.value = '#ee7e67';
-  $('#customColorWrapper').classList.add('hidden');
   renderAll();
   showToast('Assignment saved to your agenda.');
 });
