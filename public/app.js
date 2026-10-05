@@ -324,14 +324,24 @@ function renderFinishedAssignments() {
   });
 }
 function getDailyQuote(date = new Date()) {
-  const start = new Date(date.getFullYear(), 0, 0);
-  const dayNumber = Math.floor((date - start) / 86400000);
+  const start = Date.UTC(date.getFullYear(), 0, 0);
+  const currentDay = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const dayNumber = Math.floor((currentDay - start) / 86400000);
   return dailyQuotes[dayNumber % dailyQuotes.length];
 }
 
 function renderDailyQuote() {
   const quote = getDailyQuote();
   $('#dailyQuote').textContent = `“${quote}”`;
+}
+
+function scheduleDailyQuoteRefresh() {
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  setTimeout(() => {
+    renderDailyQuote();
+    scheduleDailyQuoteRefresh();
+  }, tomorrow.getTime() - now.getTime());
 }
 
 function renderAll() { renderCalendar(); renderAgenda(); renderDailyQuote(); }
@@ -458,4 +468,5 @@ assignmentForm.addEventListener('submit', (event) => {
 
 const existingUser = getStoredUser();
 if (existingUser) openPlanner(existingUser);
+scheduleDailyQuoteRefresh();
 setInterval(checkReminders, 30000);
